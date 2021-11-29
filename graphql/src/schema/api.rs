@@ -315,21 +315,40 @@ fn add_order_by_type(
     Ok(())
 }
 
+fn builld_filter_type_name(type_name: &str) -> String {
+  return format!("{}_filter", type_name).to_string();
+}
+
+fn build_block_filter_field() -> InputValue {
+    InputValue {
+        position: Pos::default(),
+        description: None,
+        name: "_change_block".to_owned(),
+        value_type: Type::NamedType(BLOCK_HEIGHT.to_owned()),
+        default_value: None,
+        directives: vec![],
+    }
+}
+
 /// Adds a `<type_name>_filter` enum type for the given fields to the schema.
 fn add_filter_type(
     schema: &mut Document,
     type_name: &str,
     fields: &[Field],
 ) -> Result<(), APISchemaError> {
-    let filter_type_name = format!("{}_filter", type_name).to_string();
+    let filter_type_name = builld_filter_type_name(type_name);
+
     match schema.get_named_type(&filter_type_name) {
         None => {
+            let mut generated_filter_fields = field_input_values(schema, fields)?;
+            generated_filter_fields.push(build_block_filter_field());
+
             let typedef = TypeDefinition::InputObject(InputObjectType {
                 position: Pos::default(),
                 description: None,
                 name: filter_type_name,
                 directives: vec![],
-                fields: field_input_values(schema, fields)?,
+                fields: generated_filter_fields,
             });
             let def = Definition::TypeDefinition(typedef);
             schema.definitions.push(def);
@@ -771,7 +790,7 @@ fn collection_arguments_for_named_type(type_name: &str) -> Vec<InputValue> {
         input_value(
             &"where".to_string(),
             "",
-            Type::NamedType(format!("{}_filter", type_name)),
+            Type::NamedType(builld_filter_type_name(type_name)),
         ),
     ];
 
@@ -1036,11 +1055,25 @@ mod tests {
                 "favoritePet_not_starts_with",
                 "favoritePet_ends_with",
                 "favoritePet_not_ends_with",
+                "_change_block"
             ]
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<String>>()
         );
+
+        let change_block_filter = filter_type
+          .fields.iter().find(move |p| {
+            match p.name.as_str() {
+                "_change_block" => true,
+                _ => false,
+            }
+          }).expect("_change_block field is missing in User_filter");
+
+        match change_block_filter.value_type {
+            Type::NamedType(name) => assert_eq!(name.as_str(), "Block_height"),
+            _ => panic!("_change_block field is not a named type"),
+        }
     }
 
     #[test]

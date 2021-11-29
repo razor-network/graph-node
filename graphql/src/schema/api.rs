@@ -316,18 +316,7 @@ fn add_order_by_type(
 }
 
 fn builld_filter_type_name(type_name: &str) -> String {
-  return format!("{}_filter", type_name).to_string();
-}
-
-fn build_block_filter_field() -> InputValue {
-    InputValue {
-        position: Pos::default(),
-        description: None,
-        name: "_change_block".to_owned(),
-        value_type: Type::NamedType(BLOCK_HEIGHT.to_owned()),
-        default_value: None,
-        directives: vec![],
-    }
+    return format!("{}_filter", type_name).to_string();
 }
 
 /// Adds a `<type_name>_filter` enum type for the given fields to the schema.
@@ -341,7 +330,7 @@ fn add_filter_type(
     match schema.get_named_type(&filter_type_name) {
         None => {
             let mut generated_filter_fields = field_input_values(schema, fields)?;
-            generated_filter_fields.push(build_block_filter_field());
+            generated_filter_fields.push(block_argument("_change_block"));
 
             let typedef = TypeDefinition::InputObject(InputObjectType {
                 position: Pos::default(),
@@ -612,7 +601,7 @@ fn query_field_for_fulltext(fulltext: &Directive) -> Option<Field> {
             directives: vec![],
         },
         // block: BlockHeight
-        block_argument(),
+        block_argument("block"),
     ];
 
     arguments.push(subgraph_error_argument());
@@ -663,7 +652,7 @@ fn add_subscription_type(
     Ok(())
 }
 
-fn block_argument() -> InputValue {
+fn block_argument(name: &str) -> InputValue {
     InputValue {
         position: Pos::default(),
         description: Some(
@@ -676,7 +665,7 @@ fn block_argument() -> InputValue {
              Defaults to the latest block when omitted."
                 .to_owned(),
         ),
-        name: "block".to_string(),
+        name: name.to_string(),
         value_type: Type::NamedType(BLOCK_HEIGHT.to_owned()),
         default_value: None,
         directives: vec![],
@@ -700,7 +689,7 @@ fn subgraph_error_argument() -> InputValue {
 /// Generates `Query` fields for the given type name (e.g. `users` and `user`).
 fn query_fields_for_type(type_name: &str) -> Vec<Field> {
     let mut collection_arguments = collection_arguments_for_named_type(type_name);
-    collection_arguments.push(block_argument());
+    collection_arguments.push(block_argument("block"));
 
     let mut by_id_arguments = vec![
         InputValue {
@@ -711,7 +700,7 @@ fn query_fields_for_type(type_name: &str) -> Vec<Field> {
             default_value: None,
             directives: vec![],
         },
-        block_argument(),
+        block_argument("block"),
     ];
 
     collection_arguments.push(subgraph_error_argument());
@@ -1063,14 +1052,15 @@ mod tests {
         );
 
         let change_block_filter = filter_type
-          .fields.iter().find(move |p| {
-            match p.name.as_str() {
+            .fields
+            .iter()
+            .find(move |p| match p.name.as_str() {
                 "_change_block" => true,
                 _ => false,
-            }
-          }).expect("_change_block field is missing in User_filter");
+            })
+            .expect("_change_block field is missing in User_filter");
 
-        match change_block_filter.value_type {
+        match &change_block_filter.value_type {
             Type::NamedType(name) => assert_eq!(name.as_str(), "Block_height"),
             _ => panic!("_change_block field is not a named type"),
         }
